@@ -1,3 +1,2 @@
-/src/credentials.json
-/src/token.json
-/src/output.txt
+/src/*.json
+/src/*.txt
