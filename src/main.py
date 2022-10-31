@@ -19,8 +19,6 @@ SCOPES = [
 
 class GDrivePerms:
     def __init__(self):
-        self.mapP2UR = {}   # map path to [(user, right)]
-        self.mapU2PR = {}   # map user to [(path, right)]
         creds = None
         # The file token.json stores the user's access and refresh tokens, and is
         # created automatically when the authorization flow completes for the first
@@ -44,21 +42,9 @@ class GDrivePerms:
         except HttpError as error:
             print(f'An error occurred: {error}')
 
-    def mapAdd(self, path, type, role, email):
-        # map path to (user,rights)
-        pathEntry = self.mapP2UR.get(path)
-        if pathEntry is None:
-            pathEntry = []
-            self.mapP2UR[path] = pathEntry
-        pathEntry.append((type, role, email))
-        # map user to (path, rights)
+    def addRow(self, path, type, role, email):
         if email is None:
             email = "_" + type
-        pathEntry = self.mapU2PR.get(email)
-        if pathEntry is None:
-            pathEntry = []
-            self.mapU2PR[email] = pathEntry
-        pathEntry.append((type, role, path))
         self.ws.append([path, type, role, email])
 
     def listDrives(self):
@@ -136,7 +122,7 @@ class GDrivePerms:
             # print("   XXXXXX", p)
 
             permDetails = p.get("permissionDetails")
-            if permDetails is None:
+            if permDetails is None: # looking at MyDrive
                 if fileId != "root" and p.get("emailAddress") == self.myDriveOwner:
                     continue
             else:
@@ -151,7 +137,7 @@ class GDrivePerms:
             type = p["type"]
             role = p["role"]
             email = p.get('emailAddress')
-            self.mapAdd(path, type, role, email)
+            self.addRow(path, type, role, email)
             indentS = str(" " * indent)
             if type == "user":
                 lines.append("User " + email + " " + role)
@@ -168,22 +154,19 @@ class GDrivePerms:
     def listFiles(self, files, indent, path):
         for file in files:
             try:
-                output = self.listPerms(file["id"], indent + 3, path + "/" + file["name"])
+                isDir = file['mimeType'] == "application/vnd.google-apps.folder"
+                fpath = path + file['name']
+                if isDir:
+                    fpath += "/"
+                output = self.listPerms(file["id"], indent + 3, fpath)
                 if output != "":
-                    print(str(" " * indent) + f"{file['name']} {file['mimeType']}")
+                    print(str(" " * indent) + fpath)
                     print(output)
-                if file["mimeType"] == "application/vnd.google-apps.folder":
+                if isDir:
                     subFiles = self.listFilesInDir(file["id"])
-                    self.listFiles(subFiles, indent + 3, path + "/" + file["name"])
+                    self.listFiles(subFiles, indent + 3, fpath)
             except Exception as e:
                print("Error", e)
-
-    def printU2PR(self):
-        users = sorted(self.mapU2PR.keys())
-        for user in users:
-            print(user)
-            for pr in self.mapU2PR[user]:
-                print("  ", pr[2], pr[0], pr[1])  # path, type, role
 
     def __enter__(self):
         self.wb = openpyxl.Workbook()
@@ -201,8 +184,8 @@ def main():
     with GDrivePerms() as gdp:
         print("MyDrive")
         files = gdp.listRootLevelFiles(None)
-        print(gdp.listPerms("root", 3, "MyDrive"))
-        gdp.listFiles(files, 0, "MyDrive")
+        print(gdp.listPerms("root", 3, "MyDrive/"))
+        gdp.listFiles(files, 0, "MyDrive/")
 
         print()
         print()
@@ -213,17 +196,11 @@ def main():
             drvName = drive["name"]
             driveId = drive["id"]
             print(drvName)
-            print(gdp.listPerms(driveId, 3, drvName))
+            print(gdp.listPerms(driveId, 3, drvName + "/"))
             print()
             files = gdp.listRootLevelFiles(driveId)
-            gdp.listFiles(files, 3, drvName)
+            gdp.listFiles(files, 3, drvName + "/")
         print()
-        with open("p2ur.json", "w") as fp:
-            json.dump(gdp.mapP2UR, fp, indent=2)
-        with open("u2pr.json", "w") as fp:
-            json.dump(gdp.mapU2PR, fp, indent=2)
-        print("Users to Path/Rights:")
-        gdp.printU2PR()
 
 if __name__ == '__main__':
     main()
