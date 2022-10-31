@@ -1,5 +1,6 @@
 import os
 import json
+import openpyxl
 
 import google.auth.transport.requests
 from google.oauth2.credentials import Credentials
@@ -58,6 +59,7 @@ class GDrivePerms:
             pathEntry = []
             self.mapU2PR[email] = pathEntry
         pathEntry.append((type, role, path))
+        self.ws.append([path, type, role, email])
 
     def listDrives(self):
         nextPageTokenD = None
@@ -80,6 +82,8 @@ class GDrivePerms:
         res = []
         while True:
             if driveId is None:
+                root = self.service.files().get(fileId="root", fields="*").execute()
+                self.myDriveOwner = root["owners"][0]["emailAddress"]
                 results = self.service.files().list(
                     pageToken=nextPageToken,
                     q="'root' in parents",
@@ -132,7 +136,10 @@ class GDrivePerms:
             # print("   XXXXXX", p)
 
             permDetails = p.get("permissionDetails")
-            if permDetails is not None:
+            if permDetails is None:
+                if fileId != "root" and p.get("emailAddress") == self.myDriveOwner:
+                    continue
+            else:
                 allInherited = True
                 for permDetail in permDetails:
                     if not permDetail.get("inherited"):
@@ -169,7 +176,7 @@ class GDrivePerms:
                     subFiles = self.listFilesInDir(file["id"])
                     self.listFiles(subFiles, indent + 3, path + "/" + file["name"])
             except Exception as e:
-                print("Error", e)
+               print("Error", e)
 
     def printU2PR(self):
         users = sorted(self.mapU2PR.keys())
@@ -178,34 +185,45 @@ class GDrivePerms:
             for pr in self.mapU2PR[user]:
                 print("  ", pr[2], pr[0], pr[1])  # path, type, role
 
+    def __enter__(self):
+        self.wb = openpyxl.Workbook()
+        self.ws = self.wb.active
+        self.ws.title = "DrivePerms"
+        self.ws.freeze_panes = "A2"
+        self.ws.append(["Path", "Type", "Role", "Email"])
+        return self
+
+    def __exit__(self, *args):
+        self.wb.save("DrivePerms.xlsx")
+        self.wb.close()
 
 def main():
-    gdp = GDrivePerms()
+    with GDrivePerms() as gdp:
+        print("MyDrive")
+        files = gdp.listRootLevelFiles(None)
+        print(gdp.listPerms("root", 3, "MyDrive"))
+        gdp.listFiles(files, 0, "MyDrive")
 
-    print("My Files")
-    files = gdp.listRootLevelFiles(None)
-    gdp.listFiles(files, 0, "MyDrive")
-
-    print()
-    print()
-    print('Geteilte Ablagen:')
-    drives = gdp.listDrives()
-    for drive in drives:
         print()
-        drvName = drive["name"]
-        driveId = drive["id"]
-        print(drvName)
-        print(gdp.listPerms(driveId, 3, drvName))
         print()
-        files = gdp.listRootLevelFiles(driveId)
-        gdp.listFiles(files, 3, drvName)
-    print()
-    with open("p2ur.json", "w") as fp:
-        json.dump(gdp.mapP2UR, fp, indent=2)
-    with open("u2pr.json", "w") as fp:
-        json.dump(gdp.mapU2PR, fp, indent=2)
-    print("Users to Path/Rights:")
-    gdp.printU2PR()
+        print('Geteilte Ablagen:')
+        drives = gdp.listDrives()
+        for drive in drives:
+            print()
+            drvName = drive["name"]
+            driveId = drive["id"]
+            print(drvName)
+            print(gdp.listPerms(driveId, 3, drvName))
+            print()
+            files = gdp.listRootLevelFiles(driveId)
+            gdp.listFiles(files, 3, drvName)
+        print()
+        with open("p2ur.json", "w") as fp:
+            json.dump(gdp.mapP2UR, fp, indent=2)
+        with open("u2pr.json", "w") as fp:
+            json.dump(gdp.mapU2PR, fp, indent=2)
+        print("Users to Path/Rights:")
+        gdp.printU2PR()
 
 if __name__ == '__main__':
     main()
