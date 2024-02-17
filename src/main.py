@@ -159,8 +159,9 @@ class GDrivePerms:
                 if isDir:
                     fpath += "/"
                 output = self.listPerms(file["id"], indent + 3, fpath)
-                if output != "":
+                if output != "" or isDir:
                     print(str(" " * indent) + fpath)
+                if output != "":
                     print(output)
                 if isDir:
                     subFiles = self.listFilesInDir(file["id"])
@@ -204,23 +205,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-"""
-Alle:
-                    deleted
-My-Drive:
-Type    Role
-user    owner       emailAddress displayName
-user    writer      emailAddress displayName
-user    reader      emailAddress displayName
-anyone  reader      allowFileDiscovery
-anyone  writer      allowFileDiscovery
-domain  reader      allowFileDiscovery
-domain  writer      allowFileDiscovery
-
-Shared:
-alle                        emailAddress displayName permissionDetails
-group   fileOrganizer
-group   organizer
-user    fileOrganizer
-"""
